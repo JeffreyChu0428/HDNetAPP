@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 ECG Monitor APP</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .page { display: none; }
+    .active { display: block; }
+
+    #chart-container {
+      width: 600px;
+      height: 150px;
+    }
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #warning {
+      color: red;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <!-- 初始畫面 -->
+  <div id="connectPage" class="page active">
+    <h1>ESP32 ECG Monitor APP</h1>
+    <button onclick="connect()">Connect to Device</button>
+  </div>
+
+  <!-- 資料頁面 -->
+  <div id="monitorPage" class="page">
+    <h2>Home Page</h2>
+    <button onclick="startTraining()">Start Training</button>
+    <p id="status">Mode: Inference</p>
+    <p id="collecting-status"></p>
+    <p id="warning"></p>
+    <div id="chart-container">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <!-- BLE 配對與頁面切換 -->
+  <script>
+    let device;
+    function showPage(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    async function connect() {
+      const serviceUuid = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+      const characteristicUuid = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+      
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'ESP32' }],
+          optionalServices: [serviceUuid]
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(serviceUuid);
+        const characteristic = await service.getCharacteristic(characteristicUuid);
+        window.bleCharacteristic = characteristic;
+
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+
+        showPage('monitorPage');  // 連線成功顯示資料頁
+        startStreaming();        // 開始模擬並進行推論
+        if (!window.renderLoopStarted) {
+          renderLoop();
+          window.renderLoopStarted = true;
+        }
+      } catch (error) {
+        console.error('Bluetooth connection failed:', error);
+      }
+    }
+
+    function onDisconnected() {
+      console.warn('Bluetooth disconnected. Returning to connect page.');
+      if (inferInterval) clearInterval(inferInterval);
+      showPage('connectPage');
+    }
+  </script>
+
+  <!-- 訊號模擬與推論邏輯 -->
+  <script src="app.js"></script>
+</body>
+</html>
